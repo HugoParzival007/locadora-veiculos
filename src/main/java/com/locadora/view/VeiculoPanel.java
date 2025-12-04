@@ -17,16 +17,17 @@ public class VeiculoPanel extends JPanel {
     public VeiculoPanel() {
         setLayout(new BorderLayout());
         JPanel bp = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        JButton btnNovo = new JButton("Novo Veículo"), btnExcluir = new JButton("Excluir"), btnStatus = new JButton("Status"), btnRef = new JButton("Atualizar Lista");
-        bp.add(btnNovo); bp.add(btnStatus); bp.add(btnExcluir); bp.add(btnRef);
+        // Adicionado botão Editar
+        JButton btnNovo = new JButton("Novo Veículo"), btnEditar = new JButton("Editar"), btnExcluir = new JButton("Excluir"), btnStatus = new JButton("Status"), btnRef = new JButton("Atualizar Lista");
+        bp.add(btnNovo); bp.add(btnEditar); bp.add(btnStatus); bp.add(btnExcluir); bp.add(btnRef);
 
-        // Colunas completas conforme o Model
         String[] col = {"ID", "Placa", "Modelo", "Marca", "Cor", "KM", "Chassi", "Renavam", "Status"};
         model = new DefaultTableModel(col, 0) { @Override public boolean isCellEditable(int r, int c) { return false; } };
         table = new JTable(model);
         carregar();
 
         btnNovo.addActionListener(e -> novo());
+        btnEditar.addActionListener(e -> editar()); // Ação Editar
         btnStatus.addActionListener(e -> status());
         btnExcluir.addActionListener(e -> excluir());
         btnRef.addActionListener(e -> carregar());
@@ -39,13 +40,15 @@ public class VeiculoPanel extends JPanel {
         for(Veiculo v : veiculoDAO.listarTodos(Veiculo.class)) {
             String mod = (v.getModelo()!=null) ? v.getModelo().getNome() : "-";
             String mar = (v.getModelo()!=null && v.getModelo().getMarca()!=null) ? v.getModelo().getMarca().getNome() : "-";
-            // Adicionado Chassi na visualização para ficar completo
             model.addRow(new Object[]{v.getId(), v.getPlaca(), mod, mar, v.getCor(), v.getKm(), v.getChassi(), v.getRenavam(), v.getStatus()});
         }
     }
 
-    private void novo() {
+    // Lógica unificada de formulário (usada por Novo e Editar)
+    private void showForm(Veiculo v, String titulo) {
         List<Marca> marcas = marcaDAO.listarTodos(Marca.class);
+        if (marcas.isEmpty()) { JOptionPane.showMessageDialog(this, "Cadastre Marcas primeiro!"); return; }
+
         JComboBox<Marca> cmbMar = new JComboBox<>(marcas.toArray(new Marca[0]));
         JComboBox<Modelo> cmbMod = new JComboBox<>();
 
@@ -57,27 +60,63 @@ public class VeiculoPanel extends JPanel {
             Marca m = (Marca) cmbMar.getSelectedItem();
             if(m!=null) for(Modelo mod : m.getListModelo()) cmbMod.addItem(mod);
         });
-        if(marcas.size()>0) cmbMar.setSelectedIndex(0);
 
-        JTextField placa=new JTextField(), cor=new JTextField(), km=new JTextField("0"), chassi=new JTextField(), ren=new JTextField();
-        Object[] msg = {"Marca:", cmbMar, "Modelo:", cmbMod, "Placa:", placa, "Cor:", cor, "KM:", km, "Chassi:", chassi, "Renavam (Opcional 0km):", ren};
+        // Configura seleção inicial (se for edição)
+        if(v.getModelo() != null && v.getModelo().getMarca() != null) {
+            // Gambiarra necessária para selecionar o item correto no combo carregado do banco
+            for(int i=0; i<cmbMar.getItemCount(); i++) {
+                if(((Marca)cmbMar.getItemAt(i)).getId().equals(v.getModelo().getMarca().getId())) {
+                    cmbMar.setSelectedIndex(i);
+                    break;
+                }
+            }
+            // Atualiza modelos e seleciona
+            for(int i=0; i<cmbMod.getItemCount(); i++) {
+                if(((Modelo)cmbMod.getItemAt(i)).getId().equals(v.getModelo().getId())) {
+                    cmbMod.setSelectedIndex(i);
+                    break;
+                }
+            }
+        } else if (marcas.size() > 0) {
+            cmbMar.setSelectedIndex(0);
+        }
 
-        if(JOptionPane.showConfirmDialog(this, msg, "Novo", JOptionPane.OK_CANCEL_OPTION)==JOptionPane.OK_OPTION) {
+        JTextField placa = new JTextField(v.getPlaca()), cor = new JTextField(v.getCor()),
+                km = new JTextField(v.getKm() != null ? String.valueOf(v.getKm()) : "0"),
+                chassi = new JTextField(v.getChassi()), ren = new JTextField(v.getRenavam());
+
+        Object[] msg = { "Marca:", cmbMar, "Modelo:", cmbMod, "Placa:", placa, "Cor:", cor, "KM:", km, "Chassi (*):", chassi, "Renavam:", ren };
+
+        if(JOptionPane.showConfirmDialog(this, msg, titulo, JOptionPane.OK_CANCEL_OPTION) == JOptionPane.OK_OPTION) {
             try {
                 if(chassi.getText().isEmpty()) throw new Exception("Chassi obrigatório");
                 int k = Integer.parseInt(km.getText());
                 if(k > 0 && ren.getText().isEmpty()) throw new Exception("Para usados (KM>0), Renavam é obrigatório!");
 
-                Veiculo v = new Veiculo();
                 v.setModelo((Modelo)cmbMod.getSelectedItem());
                 v.setPlaca(placa.getText()); v.setCor(cor.getText()); v.setKm(k);
-                v.setChassi(chassi.getText()); v.setRenavam(ren.getText()); v.setStatus(StatusVeiculo.DISPONIVEL);
+                v.setChassi(chassi.getText()); v.setRenavam(ren.getText());
+                if(v.getStatus() == null) v.setStatus(StatusVeiculo.DISPONIVEL);
 
-                veiculoDAO.salvar(v);
+                if(v.getId() == null) veiculoDAO.salvar(v); // Novo
+                else veiculoDAO.atualizar(v); // Editar
+
                 JOptionPane.showMessageDialog(this, "Salvo!");
                 carregar();
             } catch(Exception ex) { ViewUtils.tratarErro(ex); }
         }
+    }
+
+    private void novo() {
+        showForm(new Veiculo(), "Novo Veículo");
+    }
+
+    private void editar() {
+        int r = table.getSelectedRow();
+        if(r == -1) { JOptionPane.showMessageDialog(this, "Selecione um veículo"); return; }
+        Long id = (Long)model.getValueAt(r, 0);
+        Veiculo v = veiculoDAO.buscar(Veiculo.class, id);
+        if(v != null) showForm(v, "Editar Veículo");
     }
 
     private void status() {
