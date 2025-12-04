@@ -1,4 +1,8 @@
 package com.locadora.model.enums;
 
-public class StatusContrato {
+public enum StatusContrato {
+    ATIVO,
+    FINALIZADO,
+    CANCELADO,
+    EM_ANALISE
 }

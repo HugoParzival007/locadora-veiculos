@@ -1,4 +1,9 @@
 package com.locadora.model.enums;
 
-public class TipoPagamento {
+public enum TipoPagamento {
+    CARTAO_CREDITO,
+    CARTAO_DEBITO,
+    PIX,
+    BOLETO,
+    DINHEIRO
 }

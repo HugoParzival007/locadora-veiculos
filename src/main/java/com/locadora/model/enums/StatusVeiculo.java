@@ -1,4 +1,8 @@
 package com.locadora.model.enums;
 
-public class StatusVeiculo {
+public enum StatusVeiculo {
+    DISPONIVEL,
+    LOCADO,
+    EM_MANUTENCAO,
+    INDISPONIVEL
 }
